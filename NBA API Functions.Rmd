@@ -1,0 +1,323 @@
+---
+title: "NBA API v1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(httr)
+library(jsonlite)
+library(tidyverse)
+library(stringr)
+library(plyr)
+library(magrittr)
+library(lubridate)
+
+```
+
+TODO
+    * Players - Add id as first feature for joining to player table (others too?)
+    * Season Averages - Automatically query players and join data
+    * Teams - Search by city name or team name
+    * Games - Reorder
+    * Stats - Reorder
+    * Season Averages - Reorder
+
+## Package Global Options
+
+```{r}
+
+current_year <- year(today())
+
+year_url <- paste0('https://www.balldontlie.io/api/v1/games?&seasons[]=', current_year) %>% 
+  GET()
+  
+results <- fromJSON(content(year_url, "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE) %>% 
+   extract2(1)
+
+current_season <- 
+  case_when(
+    length(results) == 0 ~ current_year - 1,
+    TRUE ~ current_year
+  )
+
+```
+
+
+## Players
+
+```{r}
+
+NBA_PLAYERS <- function(search = "", per_page = 100) {
+  url <- paste0("https://www.balldontlie.io/api/v1/players", 
+                "?",
+                "&search=", search,
+                "&per_page=", per_page) 
+  data <- GET(url)
+  
+page_count <- fromJSON(content(data, "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE)[[2]][[1]]
+  
+  urls <- list()
+  
+  for(i in 0:page_count){
+    urls[[i+1]] <- paste0(url, "&page=", i)
+}
+  
+all_data <- lapply(urls, GET)
+  
+combo_data <- list()
+
+for(i in 0:page_count){
+  combo_data[[i+1]] <- fromJSON(content(all_data[[i+1]], "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE) %>% 
+   extract2(1)
+
+}
+
+dataframe <- do.call(rbind,combo_data) %>% 
+  as.data.frame() 
+
+ dataframe %>% 
+    mutate(height_total_inches = height_feet * 12 + height_inches) %>% 
+    relocate(id, 
+             first_name, 
+             last_name, 
+             position, 
+             height_feet, 
+             height_inches, 
+             height_total_inches, 
+             weight_pounds) %>% 
+   distinct()
+}
+
+```
+
+```{r}
+
+data <- NBA_PLAYERS("john") %>% 
+  print()
+
+data <- NBA_PLAYERS() %>% 
+  print()
+
+```
+
+
+## Teams
+
+```{r}
+
+NBA_TEAMS <- function(search = "", per_page = 30) {
+  url <- paste0("https://www.balldontlie.io/api/v1/teams", 
+                "?",
+                "&per_page=", per_page) 
+  data <- GET(url)
+  
+  flat_data <- fromJSON(content(data, "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE)[[1]]
+}
+
+```
+
+```{r}
+
+data <- NBA_TEAMS() %>% 
+  print()
+
+```
+
+## Games
+
+```{r}
+
+NBA_GAMES <- function(dates = "", season = "", postseason = "", start_date = "", end_date = "", team_ids = "", per_page = 100) {
+  url <- paste0("https://www.balldontlie.io/api/v1/games", 
+                "?",
+                if_else(dates != "", paste0("&dates[]=", dates), ""),
+                if_else(season != "", paste0("&seasons[]=", season), paste0("&seasons[]=", current_season)),
+                if_else(postseason != "", paste0("&postseason=", postseason), ""),
+                if_else(start_date != "", paste0("&start_date=", start_date), ""),
+                if_else(end_date != "", paste0("&end_date=", end_date), ""),
+                if_else(team_ids != "", paste0("&team_ids[]=", team_ids), ""),
+                "&per_page=", per_page) 
+  data <- GET(url)
+  
+  print(data)
+  
+page_count <- fromJSON(content(data, "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE)[[2]][[1]]
+  
+  urls <- list()
+  
+  for(i in 0:page_count){
+    urls[[i+1]] <- paste0(url, "&page=", i)
+}
+  
+all_data <- lapply(urls, GET)
+  
+combo_data <- list()
+
+for(i in 0:page_count){
+  combo_data[[i+1]] <- fromJSON(content(all_data[[i+1]], "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE) %>% 
+   extract2(1)
+
+}
+
+dataframe <- do.call(rbind,combo_data) %>% 
+  as.data.frame() %>% 
+  distinct()
+}
+
+```
+
+```{r}
+
+data <- NBA_GAMES(end_date = "2021-06-05", team_ids = 17, postseason = "TRUE") %>% 
+  print()
+
+```
+
+
+## Stats
+
+```{r}
+
+NBA_STATS <- function(dates = "", season = "", postseason = "", start_date = "", end_date = "", team_ids = "", per_page = 100) {
+  url <- paste0("https://www.balldontlie.io/api/v1/stats", 
+                "?",
+                if_else(dates != "", paste0("&dates[]=", dates), ""),
+                if_else(season != "", paste0("&seasons[]=", season), paste0("&seasons[]=", current_season)),
+                if_else(postseason != "", paste0("&postseason=", postseason), ""),
+                if_else(start_date != "", paste0("&start_date=", start_date), ""),
+                if_else(end_date != "", paste0("&end_date=", end_date), ""),
+                if_else(team_ids != "", paste0("&team_ids[]=", team_ids), ""),
+                "&per_page=", per_page) 
+  data <- GET(url)
+  
+  print(data)
+  
+page_count <- fromJSON(content(data, "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE)[[2]][[1]]
+
+print(page_count)
+  
+  urls <- list()
+  
+  for(i in 0:page_count){
+    urls[[i+1]] <- paste0(url, "&page=", i)
+}
+  
+all_data <- lapply(urls, GET)
+  
+combo_data <- list()
+
+for(i in 0:page_count){
+  combo_data[[i+1]] <- fromJSON(content(all_data[[i+1]], "text"), 
+                        flatten = TRUE, 
+                        simplifyDataFrame = TRUE) %>% 
+   extract2(1)
+
+}
+
+dataframe <- do.call(rbind,combo_data) %>% 
+  as.data.frame() %>% 
+  distinct() 
+}
+
+```
+
+```{r}
+
+data <- NBA_STATS(postseason = 'TRUE', season = 2020) %>% 
+  print()
+
+```
+
+
+## Season Averages
+
+### Season Averages with Piping
+
+```{r}
+
+NBA_SEASON_AVG <- function(player_ids = ., season = "", per_page = 100) {
+
+  url_ids <- list()
+  
+    for(i in 1:length(player_ids)){
+      url_ids[[i]] <- paste0("&player_ids[]=", player_ids[i])
+    }
+  
+  multi_ids <- url_ids %>% 
+    unlist() %>% 
+    paste0(collapse = "")
+  
+      url <- paste0("https://www.balldontlie.io/api/v1/season_averages", 
+                  "?",
+                  if_else(season != "", paste0("&season=", season), paste("&season=", current_season)),
+                  if_else(player_ids != "", multi_ids, ""),
+                  "&per_page=", per_page) %>% 
+        extract2(1)
+    
+    data <- GET(url)
+    
+    print(data)
+    
+    stats_data <- fromJSON(content(data, "text"), 
+                          flatten = TRUE, 
+                          simplifyDataFrame = TRUE) %>% 
+      extract2(1)
+  
+  dataframe <- stats_data %>% 
+    as.data.frame() %>% 
+    distinct() 
+}
+
+```
+
+```{r}
+
+player_ids <- c(105)
+
+data <- 
+  player_ids %>% 
+  NBA_SEASON_AVG() %>% 
+  print()
+
+```
+
+## Vignettes
+
+```{r}
+
+stats <- NBA_STATS(season = 2020)
+
+
+```
+
+
+
+
+
+## Errors 
+
+The balldontlie API uses the following error codes:
+
+Error Code	Meaning
+400	Bad Request -- Your request is invalid.
+404	Not Found -- The specified resource could not be found.
+406	Not Acceptable -- You requested a format that isn't json.
+429	Too Many Requests -- Stop bombarding us.
+500	Internal Server Error -- We had a problem with our server. Try again later.
+503	Service Unavailable -- We're temporarily offline for maintenance. Please try again later.
